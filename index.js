@@ -1,3 +1,5 @@
+var pageSize = 10;
+
 function getParameters() {
     const searchParams = new URLSearchParams(document.location.hash.length > 0 ? document.location.hash.substring(1) : "");
     var params = {};
@@ -21,8 +23,14 @@ function getParameters() {
 function search() {
     var parameters = getParameters();
     var solutions = solutionsJson;
+    let curentPage = 1;
     for (const filterName of parameters.keys()) {
         var filterValues = parameters.get(filterName);
+        if (filterName == 'page') {
+            curentPage = filterValues[0];
+            parameters.delete('page', curentPage);
+            continue;
+        }
         for (var i in filterValues) {
             var filterValue = filterValues[i];
             var filterSolutions = tagsJson[filterName][filterValue];
@@ -35,37 +43,88 @@ function search() {
             solutions = newSolutions;
         }
     }
-    //console.log(solutions);
-    renderSolutions(solutions);
+    renderSolutions(solutions, curentPage);
     disableFilters(solutions);
     highlightSelected();
 }
 
-function renderSolutions(solutions) {
+function renderSolutions(solutions, current) {
     var filterpanelbody = $("#resultspanel");
     filterpanelbody.empty();
+
+    let currentPage = current;
+    let countSolutions = 0;
+    let dataSize = Object.keys(solutions).length;
+    let totalPage = Math.ceil(dataSize / pageSize);
+    let startData = (currentPage - 1) * pageSize + 1;
+    let endData = (currentPage * pageSize > dataSize ? dataSize : currentPage * pageSize);
+
     for (const solutionKey in solutions) {
         if (Object.hasOwnProperty.call(solutions, solutionKey)) {
-            const solution = solutions[solutionKey];
-            var solutionDiv = $('<div id="solution_' + solutionKey + '" class="solution"></div>');
-            var solutionHeadlineDiv = $('<div id="solution_' + solutionKey + '_headline" class="solutionheadline"></div>');
-            var solutionHeadlineLink = $('<a id="solution_' + solutionKey + '_headline_link" class="solutionheadlinelink" href="' + solution.path + '"></a>');
-            solutionHeadlineLink.text(solution.headline);
-            solutionHeadlineLink.attr('target', '_blank')
-            solutionHeadlineDiv.append(solutionHeadlineLink);
-            solutionDiv.append(solutionHeadlineDiv);
-            var solutionBodyDiv = $('<div id="solution_body_' + solutionKey + '" class="solutionbody"></div>');
-            if (solution.image != "") {
-                var solutionImage = $('<img id="solution_' + solutionKey + '_image" class="solutionimage" src="' + solution.image + '"></img>');
-                solutionBodyDiv.append(solutionImage);
+            countSolutions++;
+            if (countSolutions >= startData && countSolutions <= endData) {
+                const solution = solutions[solutionKey];
+                var solutionDiv = $('<div id="solution_' + solutionKey + '" class="solution"></div>');
+                var solutionHeadlineDiv = $('<div id="solution_' + solutionKey + '_headline" class="solutionheadline"></div>');
+                var solutionHeadlineLink = $('<a id="solution_' + solutionKey + '_headline_link" class="solutionheadlinelink" href="' + solution.path + '"></a>');
+                solutionHeadlineLink.text(solution.headline);
+                solutionHeadlineLink.attr('target', '_blank')
+                solutionHeadlineDiv.append(solutionHeadlineLink);
+                solutionDiv.append(solutionHeadlineDiv);
+                var solutionBodyDiv = $('<div id="solution_body_' + solutionKey + '" class="solutionbody"></div>');
+                if (solution.image != "") {
+                    var solutionImage = $('<img id="solution_' + solutionKey + '_image" class="solutionimage" src="' + solution.image + '"></img>');
+                    solutionBodyDiv.append(solutionImage);
+                }
+                var solutionSnippetDiv = $('<div id="solution_' + solutionKey + '_snippet" class="solutionsnippet"></div>');
+                solutionSnippetDiv.text(solution.snippet);
+                solutionBodyDiv.append(solutionSnippetDiv);
+                solutionDiv.append(solutionBodyDiv);
+                filterpanelbody.append(solutionDiv);
             }
-            var solutionSnippetDiv = $('<div id="solution_' + solutionKey + '_snippet" class="solutionsnippet"></div>');
-            solutionSnippetDiv.text(solution.snippet);
-            solutionBodyDiv.append(solutionSnippetDiv);
-            solutionDiv.append(solutionBodyDiv);
-            filterpanelbody.append(solutionDiv);
         }
     }
+
+    createBtns(totalPage, currentPage);
+}
+
+function createBtns(totalPage, current) {
+    $('#pagination').empty();
+    let pageSpan;
+    let currentPage = parseInt(current);
+    if (currentPage > 1) {
+        pageSpan = $("<span class='pageBtn' id='prepage' href=\"#\" data-page = " + (currentPage - 1) + "><  Precious</span>")
+        pageSpan.click(() => {
+            clickBtn(currentPage - 1);
+        });
+        $("#pagination").append(pageSpan);
+    }
+    for (let pageIndex = 1; pageIndex < totalPage + 1; pageIndex++) {
+        pageSpan = $("<a class='pageBtn' id='page" + pageIndex + "' data-page = " + (pageIndex) + "><span>" + pageIndex + "</span></a>");
+        pageSpan.click(() => {
+            clickBtn(pageIndex);
+        });
+        $("#pagination").append(pageSpan);
+    }
+    if (currentPage < totalPage) {
+        pageSpan = $("<span class='pageBtn' id='nextpage' href=\"#\"  data-page = " + (currentPage + 1) + ">Next  ></span>");
+        pageSpan.click(() => {
+            clickBtn(currentPage + 1);
+        });
+        $("#pagination").append(pageSpan);
+    }
+}
+
+function clickBtn(current) {
+    let parameters = getParameters();
+    let pageArr = parameters.get('page');
+    for (var p in pageArr) {
+        parameters.delete('page', pageArr[p]);
+    }
+    parameters.set('page', current);
+    document.location.hash = "#" + parameters.toString()
+    search();
+    $('#page' + (current)).css({ background: '#007bff', color: '#fff' });
 }
 
 function highlightSelected() {
@@ -85,7 +144,7 @@ function disableFilters(solutions) {
     $(".disabled").removeClass("disabled");
     for (const filter in tagsJson) {
         if (Object.hasOwnProperty.call(tagsJson, filter)) {
-            const tag = tagsJson[filter];
+            const tag = orderTag(tagsJson[filter]);
             var activeValues = [];
             for (const solutionKey in solutions) {
                 if (Object.hasOwnProperty.call(solutions, solutionKey)) {
@@ -107,23 +166,39 @@ function disableFilters(solutions) {
     }
 }
 
+
+function orderTag(tag) {
+    var tags = {};
+    keys = Object.keys(tag);
+    var i, len = keys.length;
+    keys.sort(function (s1, s2) {
+        var l = s1.toLowerCase(), m = s2.toLowerCase();
+        return l === m ? 0 : l > m ? 1 : -1;
+    });
+    for (i = 0; i < len; i++) {
+        k = keys[i];
+        tags[k] = tag[k];
+    }
+    return tags;
+}
+
 async function main() {
     indexJson = await $.ajax({
-        url: "index.json?r=" + Math.random()*10000
+        url: "index.json?r=" + Math.random() * 10000
     });
 
     solutionsJson = await $.ajax({
-        url: "solutions.json?r=" + Math.random()*10000
+        url: "solutions.json?r=" + Math.random() * 10000
     });
 
     tagsJson = await $.ajax({
-        url: "tags.json?r=" + (Math.random()*10000)
+        url: "tags.json?r=" + (Math.random() * 10000)
     });
 
 
     for (const filter in tagsJson) {
         if (Object.hasOwnProperty.call(tagsJson, filter)) {
-            const tag = tagsJson[filter];
+            const tag = orderTag(tagsJson[filter]);
             for (const tagValue in tag) {
                 if (Object.hasOwnProperty.call(tag, tagValue)) {
                     var solutionIds = tag[tagValue];
@@ -147,13 +222,14 @@ async function main() {
     console.log(solutionsJson);
 
     $("head").append('<link href="https://fonts.googleapis.com/icon?family=Material+Icons+Sharp" rel="stylesheet">');
-
+    var paginationDiv = $('<div id="pagination" class = "pagination"></div>');
+    $("#content").append(paginationDiv);
     var parameters = getParameters();
 
     var filterspanel = $('<div id="filterspanel" class="filterspanel"></div>');
     for (const filter in tagsJson) {
         if (Object.hasOwnProperty.call(tagsJson, filter)) {
-            const tag = tagsJson[filter];
+            const tag = orderTag(tagsJson[filter]);
             console.log(tag);
             var filterpanel = $('<div id="filterpanel_' + filter + '" class="filterpanel"></div>');
             var filterpanelhead = $('<div id="filterpanel_' + filter + '_head" class="filterpanelhead"></div>');
@@ -188,3 +264,4 @@ async function main() {
 }
 
 main();
+
